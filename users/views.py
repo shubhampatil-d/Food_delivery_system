@@ -1,12 +1,12 @@
 from django.shortcuts import render
-from rest_framework import status
+from rest_framework import status, generics, permissions
 from rest_framework.response  import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import RegisterSerializer
+from .serializers import RegisterSerializer, AddressSerializer
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-# Create your views here.
+from .models import Address
 
 class RegisterView(APIView):
     permission_classes=[AllowAny]
@@ -27,3 +27,29 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class LoginView(TokenObtainPairView):
     serializer_class= CustomTokenObtainPairSerializer
+
+
+class AddressListCreateView(generics.ListCreateAPIView):
+    serializer_class = AddressSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Address.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class SetDefaultAddressView(generics.UpdateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = Address.objects.all()
+
+    def put(self, request, pk):
+        user = request.user
+        try:
+            address = Address.objects.get(pk=pk, user=user)
+            Address.objects.filter(user=user).update(is_default=False)
+            address.is_default = True
+            address.save()
+            return Response({'message': 'Default address set'}, status=status.HTTP_200_OK)
+        except Address.DoesNotExist:
+            return Response({'error': 'Address not found'}, status=status.HTTP_404_NOT_FOUND)
